@@ -7204,7 +7204,7 @@ Layout.prototype = {
      */
     getScriptNames: function() {
         var layout = this.getTable();
-        if (!layout) { return []; }
+        if (!layout || !layout.scripts) { return []; }
         return layout.scripts.map(function(script) {
             return script.tag;
         });
@@ -7218,7 +7218,7 @@ Layout.prototype = {
      */
     getDefaultScriptName: function() {
         var layout = this.getTable();
-        if (!layout) { return; }
+        if (!layout || !layout.scripts) { return []; }
         var hasLatn = false;
         for (var i = 0; i < layout.scripts.length; i++) {
             var name = layout.scripts[i].tag;
@@ -7237,7 +7237,7 @@ Layout.prototype = {
      */
     getScriptTable: function(script, create) {
         var layout = this.getTable(create);
-        if (layout) {
+        if (layout && layout.scripts) {
             script = script || 'DFLT';
             var scripts = layout.scripts;
             var pos = searchTag(layout.scripts, script);
@@ -10903,11 +10903,12 @@ Font.prototype.charToGlyph = function(c) {
 
 var supportsForOf = false;
 try {
-  new Function('for (var i of []) {}')();
-  supportsForOf = true;
-} catch(err) {
-  // console.log("ForOf is not supported");
-  supportsForOf = false;
+    /*jshint -W054 */ // this eval is used for feature detection
+    new Function('for (var i of []) {}')();
+    supportsForOf = true;
+} catch (err) {
+    // console.log("ForOf is not supported");
+    supportsForOf = false;
 }
 
 /**
@@ -10926,14 +10927,14 @@ Font.prototype.stringToGlyphs = function(s, options) {
     // Get glyph indexes
     var indexes = [];
     if (supportsForOf) {
-      for (var ch of s) {
-        indexes.push(this$1.charToGlyphIndex(ch));
-      }
+        for (var ch of s) {
+            indexes.push(this$1.charToGlyphIndex(ch));
+        }
     } else { // For IE 11 and other older browsers
-      for (var i = 0; i < s.length; i += 1) {
-        var c = s[i];
-        indexes.push(this$1.charToGlyphIndex(c));
-      }
+        for (var i = 0; i < s.length; i += 1) {
+            var c = s[i];
+            indexes.push(this$1.charToGlyphIndex(c));
+        }
     }
     var length = indexes.length;
 
@@ -11108,7 +11109,7 @@ Font.prototype.getPath = function(text, x, y, fontSize, options) {
 Font.prototype.getPaths = function(text, x, y, fontSize, options) {
     var glyphPaths = [];
     this.forEachGlyph(text, x, y, fontSize, options, function(glyph, gX, gY, gFontSize) {
-        var glyphPath = glyph.getPath(gX, gY, gFontSize);
+        var glyphPath = glyph.getPath(gX, gY, gFontSize, options, this);
         glyphPaths.push(glyphPath);
     });
 
@@ -11798,6 +11799,34 @@ function parseLocaTable(data, start, numGlyphs, shortVersion) {
 
 var loca = { parse: parseLocaTable };
 
+// Parse the `SVG` table which contains glyph shapes as svg images
+// https://www.microsoft.com/typography/otspec/svg.htm
+function parseSVGTable(data, start, font) {
+    var glyphs = new glyphset.GlyphSet(font);
+    var p = new parse.Parser(data, start);
+    var tableVersion = p.parseUShort();
+    var offsetToSVGDocIndex = p.parseFixed();
+    var reserved = p.parseULong();
+    var numEntries = p.parseUShort();
+    var currentOffset = p.relativeOffset;
+    var objects = {};
+    for (var i = 0; i < numEntries; i++) {
+        p.relativeOffset = currentOffset;
+        var startGlyphID = p.parseUShort();
+        var endGlyphID = p.parseUShort();
+        var svgDocOffset = p.parseULong();
+        var svgDocLength = p.parseULong();
+        currentOffset = p.relativeOffset;
+        p.relativeOffset = svgDocOffset+10;
+        for (var glyphID = startGlyphID; glyphID <= endGlyphID; glyphID++) {
+            objects[glyphID] = p.parseString(svgDocLength);
+        }
+    }
+    return objects;
+}
+
+var svg = { parse: parseSVGTable };
+
 // opentype.js
 // https://github.com/nodebox/opentype.js
 // (c) 2015 Frederik De Bleser
@@ -11988,6 +12017,7 @@ function parseBuffer(buffer) {
     var locaTableEntry;
     var nameTableEntry;
     var metaTableEntry;
+    var svgTableEntry;
     var p;
 
     for (var i = 0; i < numTables; i += 1) {
@@ -12075,12 +12105,20 @@ function parseBuffer(buffer) {
             case 'meta':
                 metaTableEntry = tableEntry;
                 break;
+            case 'SVG ':
+                svgTableEntry = tableEntry;
+                break;
         }
     }
 
     var nameTable = uncompressTable(data, nameTableEntry);
     font.tables.name = _name.parse(nameTable.data, nameTable.offset, ltagTable);
     font.names = font.tables.name;
+
+    if (svgTableEntry) {
+        var svgTable = uncompressTable(data, svgTableEntry);
+        font.svgs = svg.parse(svgTable.data, svgTable.offset, font);
+    }
 
     if (glyfTableEntry && locaTableEntry) {
         var shortVersion = indexToLocFormat === 0;
