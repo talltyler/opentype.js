@@ -90,7 +90,7 @@ Layout.prototype = {
      */
     getScriptNames: function() {
         let layout = this.getTable();
-        if (!layout) { return []; }
+        if (!layout || !layout.scripts) { return []; }
         return layout.scripts.map(function(script) {
             return script.tag;
         });
@@ -104,7 +104,7 @@ Layout.prototype = {
      */
     getDefaultScriptName: function() {
         let layout = this.getTable();
-        if (!layout) { return; }
+        if (!layout || !layout.scripts) { return []; }
         let hasLatn = false;
         for (let i = 0; i < layout.scripts.length; i++) {
             const name = layout.scripts[i].tag;
@@ -123,7 +123,7 @@ Layout.prototype = {
      */
     getScriptTable: function(script, create) {
         const layout = this.getTable(create);
-        if (layout) {
+        if (layout && layout.scripts) {
             script = script || 'DFLT';
             const scripts = layout.scripts;
             const pos = searchTag(layout.scripts, script);

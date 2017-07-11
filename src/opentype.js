@@ -29,6 +29,7 @@ import maxp from './tables/maxp';
 import _name from './tables/name';
 import os2 from './tables/os2';
 import post from './tables/post';
+import svg from './tables/svg';
 import meta from './tables/meta';
 
 /**
@@ -214,6 +215,7 @@ function parseBuffer(buffer) {
     let locaTableEntry;
     let nameTableEntry;
     let metaTableEntry;
+    let svgTableEntry;
     let p;
 
     for (let i = 0; i < numTables; i += 1) {
@@ -301,12 +303,20 @@ function parseBuffer(buffer) {
             case 'meta':
                 metaTableEntry = tableEntry;
                 break;
+            case 'SVG ':
+                svgTableEntry = tableEntry;
+                break;
         }
     }
 
     const nameTable = uncompressTable(data, nameTableEntry);
     font.tables.name = _name.parse(nameTable.data, nameTable.offset, ltagTable);
     font.names = font.tables.name;
+
+    if (svgTableEntry) {
+        const svgTable = uncompressTable(data, svgTableEntry);
+        font.svgs = svg.parse(svgTable.data, svgTable.offset, font);
+    }
 
     if (glyfTableEntry && locaTableEntry) {
         const shortVersion = indexToLocFormat === 0;
