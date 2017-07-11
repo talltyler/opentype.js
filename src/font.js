@@ -342,7 +342,7 @@ Font.prototype.getPath = function(text, x, y, fontSize, options) {
 Font.prototype.getPaths = function(text, x, y, fontSize, options) {
     const glyphPaths = [];
     this.forEachGlyph(text, x, y, fontSize, options, function(glyph, gX, gY, gFontSize) {
-        const glyphPath = glyph.getPath(gX, gY, gFontSize);
+        const glyphPath = glyph.getPath(gX, gY, gFontSize, options, this);
         glyphPaths.push(glyphPath);
     });
 
